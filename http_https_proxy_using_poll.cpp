@@ -129,9 +129,59 @@ char * trimwhitespace(char * str) {
   return str;
 }
 
+
+
 class HandleClient {
 
   public:
+
+    char** str_split(char* a_str, const char a_delim)
+{
+    char** result    = 0;
+    size_t count     = 0;
+    char* tmp        = a_str;
+    char* last_comma = 0;
+    char delim[2];
+    delim[0] = a_delim;
+    delim[1] = 0;
+
+    /* Count how many elements will be extracted. */
+    while (*tmp)
+    {
+        if (a_delim == *tmp)
+        {
+            count++;
+            last_comma = tmp;
+        }
+        tmp++;
+    }
+
+    /* Add space for trailing token. */
+    count += last_comma < (a_str + strlen(a_str) - 1);
+
+    /* Add space for terminating null string so caller
+       knows where the list of returned strings ends. */
+    count++;
+
+    result = (char **)malloc(sizeof(char*) * count);
+
+    if (result)
+    {
+        size_t idx  = 0;
+        char* token = strtok(a_str, delim);
+
+        while (token)
+        {
+           // assert(idx < count);
+            *(result + idx++) = strdup(token);
+            token = strtok(0, delim);
+        }
+        //assert(idx == count - 1);
+        *(result + idx) = 0;
+    }
+
+    return result;
+}
 
     void handleClient(int client) {
 
@@ -149,7 +199,7 @@ try{
 }
      // cout<<"got something"<<len<<endl;
       request = (char * ) malloc(len);
-      memset(request, 0, sizeof(request));
+      memset(request, '\0', sizeof(request));
       for (int k = 0; k < len; k++)
         request[k] = buff[k];
 
@@ -160,6 +210,7 @@ try{
         char * hostbuf;
         int serverfd, serverport;
         hostbuf = (char * ) malloc(256);
+        memset(hostbuf,'\0',sizeof(hostbuf));
         char * sstr = substr(buff, 0, 7);
       //  outsp(buff);
         int a=extractHost(buff, hostbuf, len);
@@ -179,11 +230,14 @@ try{
           port = (char * ) malloc(256);
           memset(port, '\0', sizeof(port));
             
+            char **tokens;
+            
+          //  tokens=str_split(hostbuf,':');
           host = trimwhitespace(strtok(hostbuf, ":"));
-          port = strtok(NULL, "");
+          port = strtok(NULL, ":");
             
           serverport = atoi(port);
-           // outsp(host);
+           outsp(host);
             //outsp(port);
          
           outs(host);
@@ -192,7 +246,7 @@ try{
 
           calculateIP(client, IP, host);
           outs(IP);
-          //outsp(IP);
+          outsp(IP);
           serverfd = connectToServer(IP, serverport);
           if (serverfd > 0) {
             outs("connected");
