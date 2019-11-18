@@ -55,7 +55,7 @@ int checkHost(char *host)
     fread(buff,sizeof(buff),1,firewall);
      pthread_mutex_lock( & lock);
  
- // cout<<buff<<endl;
+  //cout<<buff<<endl;
   pthread_mutex_unlock( & lock);
    
     fclose(firewall);
@@ -81,6 +81,13 @@ void outs(const char * msg) {
   pthread_mutex_lock( & lock);
   logwriter(msg);
  // cout << msg << endl;
+  pthread_mutex_unlock( & lock);
+}
+void outsp(const char * msg) {
+    
+  pthread_mutex_lock( & lock);
+ // logwriter(msg);
+  cout << msg << endl;
   pthread_mutex_unlock( & lock);
 }
 char * substr(const char * src, int m, int n) {
@@ -146,7 +153,7 @@ try{
       for (int k = 0; k < len; k++)
         request[k] = buff[k];
 
-            outs(request);
+            //outs(request);
       // strcpy(request,buff);
       if (len > 0) {
         outs("Read data from client");
@@ -154,8 +161,13 @@ try{
         int serverfd, serverport;
         hostbuf = (char * ) malloc(256);
         char * sstr = substr(buff, 0, 7);
-        //outs(buff);
-        extractHost(buff, hostbuf, len);
+      //  outsp(buff);
+        int a=extractHost(buff, hostbuf, len);
+       if(a==0)
+       {
+           close(client);
+           return;
+       }
         if (strcmp(sstr, "CONNECT") == 0) {
           outs("Connect method");
 
@@ -163,15 +175,16 @@ try{
           char * host, * port;
 
           host = (char * ) malloc(256);
-          memset(host, 0, sizeof(host));
+          memset(host, '\0', sizeof(host));
           port = (char * ) malloc(256);
-          memset(port, 0, sizeof(host));
+          memset(port, '\0', sizeof(port));
             
           host = trimwhitespace(strtok(hostbuf, ":"));
-          port = strtok(NULL, " ");
-
+          port = strtok(NULL, "");
+            
           serverport = atoi(port);
-
+           // outsp(host);
+            //outsp(port);
          
           outs(host);
           checkHost(host);
@@ -179,9 +192,15 @@ try{
 
           calculateIP(client, IP, host);
           outs(IP);
+          //outsp(IP);
           serverfd = connectToServer(IP, serverport);
           if (serverfd > 0) {
             outs("connected");
+          }
+          else
+          {
+              close(client);
+              return;
           }
           const char * reply = "HTTP/1.1 200 Connection established\r\n\r\n";
           write(client, reply, 1024);
@@ -194,17 +213,24 @@ try{
           memset(host, 0, sizeof(host));
           host = trimwhitespace(hostbuf);
           calculateIP(client, IP, host);
-          outs(IP);
+          //outs(IP);
           serverfd = connectToServer(IP, serverport);
           if (serverfd > 0) {
-            outs("connected");
-          }
+            //outs("connected");
+          
+          
           // printf("writinf length:%d",len);
-          outs(request);
+         // outs(request);
           //printf("data is:%s",request);
           write(serverfd, request, len);
 
           relay(client, serverfd);
+          }
+          else{
+              
+        outs(IP);
+              close(client);
+          }
 
         }
         // close(client);
@@ -212,12 +238,12 @@ try{
       }
 
     }
-  void extractHost(char * buff, char * hostbuf, int len) {
-    int a = 0, j = 0, i;
+  int extractHost(char * buff, char * hostbuf, int len) {
+    int a = 0, j = 0, i,flag=0;
     for (i = 0; i < len; i++) {
       if (buff[i] == 'H') {
         if (buff[i + 1] == 'o' && buff[i + 2] == 's' && buff[i + 3] == 't') {
-
+        flag=1;
           for (j = i + 5; buff[j] != '\r'; j++)
             hostbuf[a++] = buff[j];
 
@@ -225,6 +251,7 @@ try{
       }
 
     }
+    return flag;
   }
 
   void relay_usingpoll(int fd0, int fd1) {
@@ -349,12 +376,18 @@ try{
 
     // Convert IPv4 and IPv6 addresses from text to binary form 
     if (inet_pton(AF_INET, ip, & serv_addr.sin_addr) <= 0) {
-      printf("\nInvalid address/ Address not supported \n");
+        //char *temp; 
+        printf("got invalid address\n");
+    //  sprintf(temp,"\nInvalid address/ Address not supported \n%s",ip);
+      //outs(temp);
+      
       return -1;
     }
     try {
       if (connect(sock, (struct sockaddr * ) & serv_addr, sizeof(serv_addr)) < 0) {
-        printf("\nConnection Failed \n");
+        //  char *temp;
+       printf("\nConnection Failed to  \n");
+        //outs(temp);
         return -1;
       }
 
