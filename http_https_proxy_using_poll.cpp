@@ -36,10 +36,51 @@
 using namespace std;
 
 pthread_mutex_t lock;
+FILE *logfile=fopen("nijas_hp_log.txt","w+");
+
+
+
+
+struct logger
+{
+ char *date;
+ const  char *msg;
+};
+int checkHost(char *host)
+{
+    FILE *firewall=fopen("nijas_firewall_file.txt","r+");
+    if(firewall==NULL)
+        firewall=fopen("nijas_firewall_file.txt","w+");
+    char buff[1024];
+    fread(buff,sizeof(buff),1,firewall);
+     pthread_mutex_lock( & lock);
+ 
+ // cout<<buff<<endl;
+  pthread_mutex_unlock( & lock);
+   
+    fclose(firewall);
+    return 0;
+}
+void logwriter(const char *data)
+{
+    struct logger log;
+    time_t now;
+	time(&now);
+	char *date = ctime(&now);
+	date[strlen(date) - 1] = '\0';
+    //log.date=date;
+    //log.msg=data;
+   // fprintf()
+   fprintf(logfile,"Date %s: %s\n",date,data);
+   
+    //fwrite(&log,sizeof(struct logger),1,logfile);
+}
 //class  for client handle
 void outs(const char * msg) {
+    
   pthread_mutex_lock( & lock);
-  cout << msg << endl;
+  logwriter(msg);
+ // cout << msg << endl;
   pthread_mutex_unlock( & lock);
 }
 char * substr(const char * src, int m, int n) {
@@ -91,13 +132,21 @@ class HandleClient {
       int len;
       char IP[8];
       char * request;
-
-      len = read(client, buff, sizeof(buff));
+//printf("conecnted\n");
+try{
+      len = read(client, buff, 1024);
+      //cout<<buff;
+}catch(exception ex)
+{
+    cout<<"error";
+}
+     // cout<<"got something"<<len<<endl;
       request = (char * ) malloc(len);
       memset(request, 0, sizeof(request));
       for (int k = 0; k < len; k++)
         request[k] = buff[k];
 
+            outs(request);
       // strcpy(request,buff);
       if (len > 0) {
         outs("Read data from client");
@@ -117,14 +166,15 @@ class HandleClient {
           memset(host, 0, sizeof(host));
           port = (char * ) malloc(256);
           memset(port, 0, sizeof(host));
-
+            
           host = trimwhitespace(strtok(hostbuf, ":"));
           port = strtok(NULL, " ");
 
           serverport = atoi(port);
 
-          printf("the port is: %d", serverport);
+         
           outs(host);
+          checkHost(host);
           outs(port);
 
           calculateIP(client, IP, host);
@@ -288,6 +338,7 @@ class HandleClient {
     struct sockaddr_in serv_addr;
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
       printf("\n Socket creation error \n");
+
       return -1;
     }
 
@@ -400,8 +451,10 @@ class ServerListener {
           (socklen_t * ) & addrlen)) < 0) {
         perror("accept error");
         cout << "accept error";
-        exit(EXIT_FAILURE);
+      //  exit(EXIT_FAILURE);
       }
+      
+      //exit(0);
       HandleClient clientHandler;
       std::thread t = clientHandler.handleThread(new_socket);
       t.detach();
@@ -456,6 +509,7 @@ int main(int argc, char ** argv) {
     }
     std::cout << "program exitiing" << endl;
     server.isValid = false;
+    fclose(logfile);
 
   } catch (std::exception & e) {
     cout << "unknmmnwdw error";
