@@ -4,49 +4,30 @@
  * 
  * */
 #include <stdio.h>
-
 #include <iostream>
-
 #include <thread>
-
 #include <sys/socket.h>
-
 #include <stdlib.h>
-
 #include <netinet/in.h>
-
 #include <string.h>
-
 #include <unistd.h>
-
 #include <arpa/inet.h>
-
 #include <pthread.h>
-
 #include <signal.h>
-
 #include <chrono>
-
 #include <netdb.h>
-
 #include <poll.h>
 
 #define BUFSIZE 65536
-
 using namespace std;
-
 pthread_mutex_t lock;
 FILE *logfile=fopen("nijas_hp_log.txt","w+");
-
-
-
-
 struct logger
 {
  char *date;
  const  char *msg;
 };
-int checkHost(char *host)
+int checkHost(char *host) //firewall
 {
     FILE *firewall=fopen("nijas_firewall_file.txt","r+");
     if(firewall==NULL)
@@ -61,36 +42,26 @@ int checkHost(char *host)
     fclose(firewall);
     return 0;
 }
-void logwriter(const char *data)
+void logwriter(const char *data)//logging
 {
     struct logger log;
     time_t now;
 	time(&now);
 	char *date = ctime(&now);
 	date[strlen(date) - 1] = '\0';
-    //log.date=date;
-    //log.msg=data;
-   // fprintf()
-   fprintf(logfile,"Date %s: %s\n",date,data);
-   
-    //fwrite(&log,sizeof(struct logger),1,logfile);
-}
-//class  for client handle
-void outs(const char * msg) {
-    
+   fprintf(logfile,"%s: %s\n",date,data);
+ }
+void outs(const char * msg) { //logging
   pthread_mutex_lock( & lock);
   logwriter(msg);
- // cout << msg << endl;
   pthread_mutex_unlock( & lock);
 }
-void outsp(const char * msg) {
-    
+void outsp(const char * msg) { //print on screen
   pthread_mutex_lock( & lock);
- // logwriter(msg);
   cout << msg << endl;
   pthread_mutex_unlock( & lock);
 }
-char * substr(const char * src, int m, int n) {
+char * substr(const char * src, int m, int n) { //funtion to find substr
   // get length of the destination string
   int len = n - m;
 
@@ -110,7 +81,7 @@ char * substr(const char * src, int m, int n) {
   // return the destination string
   return dest - len;
 }
-char * trimwhitespace(char * str) {
+char * trimwhitespace(char * str) { //whitespace trimmer
   char * end;
 
   // Trim leading space
@@ -129,59 +100,40 @@ char * trimwhitespace(char * str) {
   return str;
 }
 
-
-
-class HandleClient {
+class HandleClient {// handle client
 
   public:
-
-    char** str_split(char* a_str, const char a_delim)
-{
+    char** str_split(char* a_str, const char a_delim,int len,int *c)// split string into tokens as array
+    {
     char** result    = 0;
-    size_t count     = 0;
+    int count     = 0;
+    int k=0;
     char* tmp        = a_str;
-    char* last_comma = 0;
-    char delim[2];
-    delim[0] = a_delim;
-    delim[1] = 0;
-
-    /* Count how many elements will be extracted. */
-    while (*tmp)
+    char* t1 =0;
+    // outsp(a_str);
+    int i,j=0;
+    t1= (char * )malloc(len);
+    for(i=0;i<len;i++)//let me calculate how many elements req.
+            if (a_delim ==tmp[i])count++;   
+            
+           
+            if(count==0){
+                *c=0;
+                return NULL;
+            }
+            else
+                *c=count+1;
+    result=(char **)malloc(sizeof(char*) * (count+1)); //add one  to copy last section
+    for(i=0;i<len;i++)
     {
-        if (a_delim == *tmp)
-        {
-            count++;
-            last_comma = tmp;
-        }
-        tmp++;
-    }
-
-    /* Add space for trailing token. */
-    count += last_comma < (a_str + strlen(a_str) - 1);
-
-    /* Add space for terminating null string so caller
-       knows where the list of returned strings ends. */
-    count++;
-
-    result = (char **)malloc(sizeof(char*) * count);
-
-    if (result)
-    {
-        size_t idx  = 0;
-        char* token = strtok(a_str, delim);
-
-        while (token)
-        {
-           // assert(idx < count);
-            *(result + idx++) = strdup(token);
-            token = strtok(0, delim);
-        }
-        //assert(idx == count - 1);
-        *(result + idx) = 0;
-    }
-
+        j=0;
+        while(tmp[i]!=a_delim && i<len){            t1[j++]=tmp[i++];        }
+        t1[j]='\0'; //appending a null character
+    result[k++]=strdup(t1); //duplicate copy stroing into result
+      }
+    free(t1);
     return result;
-}
+    }
 
     void handleClient(int client) {
 
@@ -189,34 +141,30 @@ class HandleClient {
       int len;
       char IP[8];
       char * request;
-//printf("conecnted\n");
 try{
       len = read(client, buff, 1024);
-      //cout<<buff;
-}catch(exception ex)
+   }catch(exception ex)
 {
-    cout<<"error";
+    cout<<"read error";
 }
-     // cout<<"got something"<<len<<endl;
-      request = (char * ) malloc(len);
+      request = (char * ) malloc(len);//store copy of recvd data 
       memset(request, '\0', sizeof(request));
       for (int k = 0; k < len; k++)
         request[k] = buff[k];
 
-            //outs(request);
-      // strcpy(request,buff);
-      if (len > 0) {
+      if (len > 10) {
         outs("Read data from client");
         char * hostbuf;
         int serverfd, serverport;
-        hostbuf = (char * ) malloc(256);
+        hostbuf = (char * ) malloc(len);
         memset(hostbuf,'\0',sizeof(hostbuf));
         char * sstr = substr(buff, 0, 7);
-      //  outsp(buff);
         int a=extractHost(buff, hostbuf, len);
-       if(a==0)
+       if(a==0)//"Host: " property not found
        {
            close(client);
+           free(hostbuf);
+           free(request);
            return;
        }
         if (strcmp(sstr, "CONNECT") == 0) {
@@ -224,30 +172,28 @@ try{
 
           //next find port number
           char * host, * port;
-
-          host = (char * ) malloc(256);
-          memset(host, '\0', sizeof(host));
-          port = (char * ) malloc(256);
-          memset(port, '\0', sizeof(port));
+          char **tokens;
+          int tokensize;
+         // outsp(hostbuf);
+          //char *p="onnumilla thoru istas";
+          tokens=str_split(hostbuf,':',strlen(hostbuf),&tokensize);// www.google.com:443 seperating into two array
+           free(hostbuf);
+          if(tokensize==0)
+          {     
+               close(client);
+               return;
+           }
             
-            char **tokens;
-            
-          //  tokens=str_split(hostbuf,':');
-          host = trimwhitespace(strtok(hostbuf, ":"));
-          port = strtok(NULL, ":");
-            
+          host = tokens[0];
+          port = tokens[1];
           serverport = atoi(port);
-           outsp(host);
-            //outsp(port);
-         
-          outs(host);
           checkHost(host);
-          outs(port);
-
-          calculateIP(client, IP, host);
+          calculateIP(IP, host);
           outs(IP);
-          outsp(IP);
+         // outsp(IP);
           serverfd = connectToServer(IP, serverport);
+          free(tokens);
+       
           if (serverfd > 0) {
             outs("connected");
           }
@@ -257,40 +203,42 @@ try{
               return;
           }
           const char * reply = "HTTP/1.1 200 Connection established\r\n\r\n";
-          write(client, reply, 1024);
+          write(client, reply, strlen(reply));
           relay(client, serverfd);
+          
+          
         } else { // GET POST Methods
           serverport = 80;
           char * host, * port;
 
-          host = (char * ) malloc(256);
-          memset(host, 0, sizeof(host));
-          host = trimwhitespace(hostbuf);
-          calculateIP(client, IP, host);
-          //outs(IP);
+         // host = (char * ) malloc(1024);
+          //memset(host, 0, sizeof(host));
+          
+          calculateIP(IP, hostbuf);
+          outs(IP);
           serverfd = connectToServer(IP, serverport);
+          
+           free(hostbuf);
+         // free(host);
           if (serverfd > 0) {
-            //outs("connected");
-          
-          
-          // printf("writinf length:%d",len);
-         // outs(request);
-          //printf("data is:%s",request);
+           
           write(serverfd, request, len);
 
           relay(client, serverfd);
           }
           else{
               
-        outs(IP);
+                outs(IP);
               close(client);
           }
-
+    
         }
-        // close(client);
+        // 
 
       }
-
+        close(client);
+        
+        //free(buff);
     }
   int extractHost(char * buff, char * hostbuf, int len) {
     int a = 0, j = 0, i,flag=0;
@@ -298,9 +246,11 @@ try{
       if (buff[i] == 'H') {
         if (buff[i + 1] == 'o' && buff[i + 2] == 's' && buff[i + 3] == 't') {
         flag=1;
-          for (j = i + 5; buff[j] != '\r'; j++)
+          for (j = i + 6; buff[j] != '\r'; j++)
             hostbuf[a++] = buff[j];
 
+        hostbuf[a++]='\0';
+            break;
         }
       }
 
@@ -461,7 +411,7 @@ try{
 
     return ((byte2int(Hi) << 8) | byte2int(Lo));
   }
-  void calculateIP(int client, char * p, char * addr) {
+  void calculateIP( char * p, char * addr) {
 
     int i;
     struct hostent * host_entry;
@@ -476,8 +426,6 @@ try{
         hostbuffer = inet_ntoa( * ((struct in_addr * ) host_entry -> h_addr_list[0]));
 
       sprintf(p, "%s", hostbuffer);
-
-  
 
   }
 
