@@ -141,6 +141,8 @@ class HandleClient {// handle client
       int len;
       char IP[8];
       char * request;
+       
+          int tokensize;
 try{
       len = read(client, buff, 1024);
    }catch(exception ex)
@@ -153,8 +155,10 @@ try{
         request[k] = buff[k];
 
       if (len > 10) {
+          
         outs("Read data from client");
         char * hostbuf;
+        char **tokens;
         int serverfd, serverport;
         hostbuf = (char * ) malloc(len);
         memset(hostbuf,'\0',sizeof(hostbuf));
@@ -172,17 +176,14 @@ try{
 
           //next find port number
           char * host, * port;
-          char **tokens;
-          int tokensize;
+         
          // outsp(hostbuf);
           //char *p="onnumilla thoru istas";
           tokens=str_split(hostbuf,':',strlen(hostbuf),&tokensize);// www.google.com:443 seperating into two array
-           free(hostbuf);
-          if(tokensize==0)
+           
+          if(tokensize!=0)
           {     
-               close(client);
-               return;
-           }
+             
             
           host = tokens[0];
           port = tokens[1];
@@ -192,50 +193,50 @@ try{
           outs(IP);
          // outsp(IP);
           serverfd = connectToServer(IP, serverport);
-          free(tokens);
+          
        
           if (serverfd > 0) {
             outs("connected");
-          }
-          else
-          {
-              close(client);
-              return;
-          }
+          
+         
           const char * reply = "HTTP/1.1 200 Connection established\r\n\r\n";
           write(client, reply, strlen(reply));
           relay(client, serverfd);
-          
+          }
+          }
           
         } else { // GET POST Methods
-          serverport = 80;
+          serverport = 80;//default http port
           char * host, * port;
-
-         // host = (char * ) malloc(1024);
-          //memset(host, 0, sizeof(host));
-          
+          tokens=str_split(hostbuf,':',strlen(hostbuf),&tokensize);
+          if(tokensize!=0)
+          {
+              port=tokens[1];
+              serverport=atoi(port);
+              outsp(port);
+          }
+       
           calculateIP(IP, hostbuf);
           outs(IP);
           serverfd = connectToServer(IP, serverport);
-          
-           free(hostbuf);
-         // free(host);
+        
+      
           if (serverfd > 0) {
            
           write(serverfd, request, len);
 
           relay(client, serverfd);
+          close(serverfd);
           }
-          else{
-              
-                outs(IP);
-              close(client);
-          }
+         
     
         }
         // 
-
+  free(hostbuf);
+  free(tokens);
       }
+        
+         
         close(client);
         
         //free(buff);
@@ -263,7 +264,7 @@ try{
 
     int nfds = 2, current_size = 0, i, j, len;
     struct pollfd fds[2];
-    int rc, readerfd, writerfd, conn_close = 0;
+    int rc, readerfd, writerfd;
     char buffer[BUFSIZE];
 
     //initalising poll
@@ -277,7 +278,7 @@ try{
       // outs("waiting on poll");
       rc = poll(fds, nfds, timeout);
       if (rc < 0) {
-        perror("  poll() failed");
+       outs("  poll() failed");
         break;
       }
       if (rc == 0) {
@@ -301,17 +302,13 @@ try{
         if (errno != EWOULDBLOCK) {
 
           outs("  rcv failed\n");
-          conn_close = 1;
-          //  close(fds[readerfd].fd);
-          //close_conn = TRUE;
-        }
+          
+                }
         break;
       }
       if (rc == 0) {
         outs("  Connection closed end now\n");
-        //close_conn = TRUE;
-        conn_close = 1;
-        break;
+          break;
       }
 
       /*****************************************************/
@@ -329,17 +326,12 @@ try{
       // rc = send(fds[writerfd].fd, buffer, len, 0);
       if (rc < 0) {
         outs("  send() failed");
-        close(fds[writerfd].fd);
-        conn_close = 1;
-        break;
+              break;
       }
 
     } while (1);
-    if (conn_close) {
-      close(fds[readerfd].fd);
-      close(fds[writerfd].fd);
-
-    }
+   
+     
 
   }
 
@@ -454,7 +446,31 @@ class ServerListener {
       perror("socket failed");
       exit(EXIT_FAILURE);
     }
-
+    
+    //lets open settings file
+    
+   
+        char argport[256];
+        char *http_proxy;
+    FILE *fptr;
+    if ((fptr = fopen("nijas_proxy_settings.txt", "r")) == NULL)
+    {
+        printf("Error! opening file");
+        // Program exits if file pointer returns NULL.
+        exit(1);         
+    }
+    // reads text until newline 
+   // fscanf(fptr,"%[^\n]", c);
+      fscanf(fptr,"port=%s", argport);
+      
+      outsp(argport);
+      
+      fscanf(fptr,"http_proxy=%s", http_proxy);
+      outsp(http_proxy);
+   // fscanf(fptr,"%s", c);
+     // outsp(c);
+    fclose(fptr);
+    
     // Forcefully attaching socket to the port 8080 
     /* if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
                                                    &opt, sizeof(opt))) 
@@ -497,7 +513,7 @@ class ServerListener {
 
     }
 
-    outs("server loop ending");
+    outsp("server loop ending");
     try {
       close(server_fd);
     } catch (char * msg) {
@@ -529,10 +545,7 @@ int main(int argc, char ** argv) {
 
     char q;
     ServerListener server;
-    //memset(&sa,0,sizeof(struct sigaction))
-    //  sig
     printf("HTTP/HTTPS proxy server implementation\n");
-    /* this variable is our reference to the second thread */
     //SIG_IGN
     signal(SIGPIPE, sig_handler);
     // server.runServer();
