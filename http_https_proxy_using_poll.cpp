@@ -42,6 +42,38 @@ int checkHost(char *host) //firewall
     fclose(firewall);
     return 0;
 }
+ char** str_split(char* a_str, const char a_delim,int len,int *c)// split string into tokens as array
+    {
+    char** result    = 0;
+    int count     = 0;
+    int k=0;
+    char* tmp        = a_str;
+    char* t1 =0;
+    // outsp(a_str);
+    int i,j=0;
+    t1= (char * )malloc(len);
+    for(i=0;i<len;i++)//let me calculate how many elements req.
+            if (a_delim ==tmp[i])count++;   
+            
+           
+            if(count==0){
+                *c=0;
+                return NULL;
+            }
+            else
+                *c=count+1;
+    result=(char **)malloc(sizeof(char*) * (count+1)); //add one  to copy last section
+    for(i=0;i<len;i++)
+    {
+        j=0;
+        while(tmp[i]!=a_delim && i<len){            t1[j++]=tmp[i++];        }
+        t1[j]='\0'; //appending a null character
+    result[k++]=strdup(t1); //duplicate copy stroing into result
+      }
+    free(t1);
+    return result;
+    }
+
 void logwriter(const char *data)//logging
 {
     struct logger log;
@@ -100,41 +132,73 @@ char * trimwhitespace(char * str) { //whitespace trimmer
   return str;
 }
 
+
+class ControlHandleClient {//hanlde control clients
+    public:
+    
+      void handleClient(int client) {
+
+      char buff[1024];
+      int len;
+      char IP[8];
+      char * request;
+               
+       int tokensize;
+        try{
+              len = read(client, buff, 1024);
+           }catch(exception ex)
+        {
+            cout<<"read error";
+        }
+        if(len>0)
+        {
+            
+            
+            const char *headerresponse="HTTP/1.1 200 OK \r\nServer: Nijas_proxy\r\nContent-Type: text/html charset=utf-8\r\n\r\n";
+            
+            
+            FILE *fp=fopen("index.html","r");
+            
+             char *content;
+             write(client,headerresponse,strlen(headerresponse));
+           // obtain file size:
+   //         fseek (fp , 0 , SEEK_END);
+ //long lSize = ftell (fp);
+//  rewind (fp);
+
+  // allocate memory to contain the whole file:
+  content = (char*) malloc (sizeof(char)*1024);
+if (content == NULL) {fputs ("Memory error",stderr); exit (2);}
+
+  // copy the file into the buffer:
+   //fread (content,1,lSize,fp);
+  //write(client,content,lSize);
+  
+             while((len=fread(content,1,1024,fp))>0)
+             {
+                //cout<<len<<endl;
+           write(client,content,len);
+            //cout<<"wrote"<<len<<endl;
+            
+             }
+             free(content);
+            close(client);
+            fclose(fp);
+        }
+
+      }
+       std::thread handleThread(int c) {
+    return std::thread([ = ] {
+      handleClient(c);
+    });
+       }
+
+}; 
+
 class HandleClient {// handle client
 
   public:
-    char** str_split(char* a_str, const char a_delim,int len,int *c)// split string into tokens as array
-    {
-    char** result    = 0;
-    int count     = 0;
-    int k=0;
-    char* tmp        = a_str;
-    char* t1 =0;
-    // outsp(a_str);
-    int i,j=0;
-    t1= (char * )malloc(len);
-    for(i=0;i<len;i++)//let me calculate how many elements req.
-            if (a_delim ==tmp[i])count++;   
-            
-           
-            if(count==0){
-                *c=0;
-                return NULL;
-            }
-            else
-                *c=count+1;
-    result=(char **)malloc(sizeof(char*) * (count+1)); //add one  to copy last section
-    for(i=0;i<len;i++)
-    {
-        j=0;
-        while(tmp[i]!=a_delim && i<len){            t1[j++]=tmp[i++];        }
-        t1[j]='\0'; //appending a null character
-    result[k++]=strdup(t1); //duplicate copy stroing into result
-      }
-    free(t1);
-    return result;
-    }
-
+   
     void handleClient(int client) {
 
       char buff[1024];
@@ -368,9 +432,10 @@ try{
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(port);
     //printf("port=%d", port);
-    //outs(p);
+    outsp(ip);
 
     // Convert IPv4 and IPv6 addresses from text to binary form 
+    
     if (inet_pton(AF_INET, ip, & serv_addr.sin_addr) <= 0) {
         //char *temp; 
         printf("got invalid address\n");
@@ -412,10 +477,10 @@ try{
    
 
       host_entry = gethostbyname(addr);
-      if (host_entry == NULL)
+      if (!host_entry)
         outs("host entry null");
       else
-        hostbuffer = inet_ntoa( * ((struct in_addr * ) host_entry -> h_addr_list[0]));
+        hostbuffer = inet_ntoa( * ((struct in_addr * ) host_entry -> h_addr));
 
       sprintf(p, "%s", hostbuffer);
 
@@ -430,19 +495,76 @@ try{
 
 };
 
+class Controlserver{
+    
+    public:
+    bool isValid;
+     int server_fd;
+    
+     void finish()
+    {
+        isValid=false;
+        close(server_fd);
+       // server.finish();
+         //serverThread.join();
+        
+        
+    }
+   /* void startServer(int port)
+    {
+        outsp("Server starting");
+       // sleep(5);
+        std::thread serverThread = this->server.mainThread(port);
+       
+    }*/
+    void runServer(int port) {
+   
+     
+   
+    
+
+  }
+ 
+  
+
+};
+ 
 //class for main server
 class ServerListener {
 
   public:
     bool isValid;
-  void runServer(int port) {
-    int i, server_fd, conn_num = 0;
+    int server_fd;
+    int port=8080;
+    void finish()
+    {
+        isValid=false;
+        close(server_fd);
+    }
+ 
+
+};
+
+void segfault(int signal, siginfo_t * si, void * arg) {
+  printf("caught");
+  exit(0);
+}
+void sig_handler(int signum) {
+  std::cerr << "error=" << signum;
+}
+
+// notice that the object is passed by reference
+void servthread(ServerListener& o) {
+ 
+  
+
+     int i,  conn_num = 0;
     struct sockaddr_in address;
 
     int addrlen = sizeof(address);
 
     // Creating socket file descriptor 
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+    if ((o.server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
       perror("socket failed");
       exit(EXIT_FAILURE);
     }
@@ -452,7 +574,7 @@ class ServerListener {
    
         char argport[256];
         char *http_proxy;
-    FILE *fptr;
+   /* FILE *fptr;
     if ((fptr = fopen("nijas_proxy_settings.txt", "r")) == NULL)
     {
         printf("Error! opening file");
@@ -470,7 +592,7 @@ class ServerListener {
    // fscanf(fptr,"%s", c);
      // outsp(c);
     fclose(fptr);
-    
+    */
     // Forcefully attaching socket to the port 8080 
     /* if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
                                                    &opt, sizeof(opt))) 
@@ -480,25 +602,25 @@ class ServerListener {
      } */
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
-    address.sin_port = htons(port);
+    address.sin_port = htons(o.port);
 
     // Forcefully attaching socket to the port 8080 
-    if (bind(server_fd, (struct sockaddr * ) & address,
+    if (bind(o.server_fd, (struct sockaddr * ) & address,
         sizeof(address)) < 0) {
       perror("bind failed");
       exit(EXIT_FAILURE);
     }
-    if (listen(server_fd, 5) < 0) {
+    if (listen(o.server_fd, 5) < 0) {
       perror("listen");
       cout << "listen error";
       exit(EXIT_FAILURE);
     }
-    isValid = true;
+    o.isValid = true;
     std::cout << "....HTTPS Server.... " << std::endl;
-    while (isValid) {
+    while (o.isValid) {
 
       int new_socket;
-      if ((new_socket = accept(server_fd, (struct sockaddr * ) & address,
+      if ((new_socket = accept(o.server_fd, (struct sockaddr * ) & address,
           (socklen_t * ) & addrlen)) < 0) {
         perror("accept error");
         cout << "accept error";
@@ -514,49 +636,133 @@ class ServerListener {
     }
 
     outsp("server loop ending");
-    try {
-      close(server_fd);
-    } catch (char * msg) {
-      std::cout << "Error closing sockewt" << msg;
+    
+    
+    
+    
+} 
+void controlthread(Controlserver &control,ServerListener &server,int port)
+{
+     int i,  conn_num = 0;
+    struct sockaddr_in address;
+
+    int addrlen = sizeof(address);
+
+    // Creating socket file descriptor 
+    if ((control.server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+      perror("socket failed");
+      exit(EXIT_FAILURE);
+    }
+    
+    //lets open settings file
+    
+   
+        char argport[256];
+        char *http_proxy;
+  /*  FILE *fptr;
+    if ((fptr = fopen("nijas_proxy_settings.txt", "r")) == NULL)
+    {
+        printf("Error! opening file");
+        // Program exits if file pointer returns NULL.
+        exit(1);         
+    }
+    // reads text until newline 
+   // fscanf(fptr,"%[^\n]", c);
+      fscanf(fptr,"port=%s", argport);
+      
+      outsp(argport);
+      
+      fscanf(fptr,"http_proxy=%s", http_proxy);
+      outsp(http_proxy);
+   // fscanf(fptr,"%s", c);
+     // outsp(c);
+    fclose(fptr);
+    */
+    // Forcefully attaching socket to the port 8080 
+    /* if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
+                                                   &opt, sizeof(opt))) 
+     { 
+         perror("setsockopt"); 
+         exit(EXIT_FAILURE); 
+     } */
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(port);
+
+    // Forcefully attaching socket to the port 8080 
+    if (bind(control.server_fd, (struct sockaddr * ) & address,
+        sizeof(address)) < 0) {
+      perror("bind failed");
+      exit(EXIT_FAILURE);
+    }
+    if (listen(control.server_fd, 5) < 0) {
+      perror("listen");
+      cout << "listen error";
+      exit(EXIT_FAILURE);
+    }
+    control.isValid = true;
+    std::cout << "....Control Server started.... " << std::endl;
+  // startServer(port);
+   std::thread t1(servthread, std::ref(server));
+       // t1.detach();
+    while (control.isValid) {
+
+      int new_socket;
+      if ((new_socket = accept(control.server_fd, (struct sockaddr * ) & address,
+          (socklen_t * ) & addrlen)) < 0) {
+        perror("accept error");
+        cout << "accept error";
+      //  exit(EXIT_FAILURE);
+      }
+      
+      //exit(0);
+      ControlHandleClient clientHandler;
+      std::thread t = clientHandler.handleThread(new_socket);
+      t.detach();
+      // cout<<"connection number"<<conn_num++<<endl;
+
     }
 
-  }
-  std::thread mainThread(int port) {
-    return std::thread([ = ] {
-      runServer(port);
-    });
-  }
-
-};
-
-void segfault(int signal, siginfo_t * si, void * arg) {
-  printf("caught");
-  exit(0);
-}
-void sig_handler(int signum) {
-  std::cerr << "error=" << signum;
+    outsp("control server loop ending");
+   outsp("let me close server ");
+   server.finish();
+   t1.join();
+    
 }
 int main(int argc, char ** argv) {
   struct sigaction sa;
 
   try {
     int x = 0;
-    int port = 8080;
+    int port = 8080,controlport=8081;
 
     char q;
+    
+    Controlserver controlserver;
     ServerListener server;
+   
     printf("HTTP/HTTPS proxy server implementation\n");
     //SIG_IGN
+    std::thread controlThread(controlthread, std::ref(controlserver),std::ref(server),controlport);
+    
+    
     signal(SIGPIPE, sig_handler);
     // server.runServer();
-    std::thread mainThread = server.mainThread(port);
-    mainThread.detach();
+    
+   
+    
     while (q != 'q') {
       cin >> q;
 
     }
-    std::cout << "program exitiing" << endl;
-    server.isValid = false;
+    std::cout << "wating for control server" << endl;
+    
+    controlserver.finish();
+    
+    controlThread.join();
+ 
+   
+    //sleep(1000);
     fclose(logfile);
 
   } catch (std::exception & e) {
