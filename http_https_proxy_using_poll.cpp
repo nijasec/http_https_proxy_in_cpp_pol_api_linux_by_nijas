@@ -193,6 +193,36 @@ int readSettings(struct settings &temp)
 class ControlHandleClient 
 {//hanlde control clients
     public:
+      void extractGET(char *buff,int len)
+      {
+          int k=0,tokensize=0;
+          char *temp;
+          temp=(char*) malloc(len);
+          for(int i=0;i<len;i++)
+          {
+              if(buff[i]=='?')
+              {
+                  int j=i+1;
+                  while(buff[j]!=' '){
+                      temp[k++]=buff[j++];
+                      
+                  }
+                      
+                      temp[k]='\0';break;
+              }
+          }
+          outsp(temp);
+          char **token=str_split(temp,'&',strlen(temp),&tokensize);
+          if(tokensize>0)
+          {
+          for(k=0;k<tokensize;k++)
+          {
+              outsp(token[k]);
+          }
+              
+          }
+          
+      }
       void handleClient(int client) {
 
       char buff[2048],IP[8];
@@ -206,14 +236,27 @@ class ControlHandleClient
         }
         if(len>0)
         {
+           // extractGET(buff,len);
+            
             const char *headerresponse="HTTP/1.1 200 OK \r\nServer: Nijas_proxy\r\nContent-Type: text/html charset=utf-8\r\n\r\n";
             FILE *fp=fopen("index.html","r");
             char *content;
             write(client,headerresponse,strlen(headerresponse));
             content = (char*) malloc (sizeof(char)*1024);
             if (content == NULL) {fputs ("Memory error",stderr); exit (2);}
-            while((len=fread(content,1,1024,fp))>0)
-                write(client,content,len);
+            long ptr=0;
+            while(1)
+            {
+                
+               len= fread(content,1,1024,fp);
+               if(len<1)
+                   break;
+                 write(client,content,len);
+                 
+                 //fseek(fp,)
+            }
+            
+           
             free(content);
             close(client);
             fclose(fp);
