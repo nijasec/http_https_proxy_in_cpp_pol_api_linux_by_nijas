@@ -17,11 +17,18 @@
 #include <chrono>
 #include <netdb.h>
 #include <poll.h>
-
 #define BUFSIZE 65536
+
+struct settings{
+    
+    int port=8080;
+    int enableproxy=0;
+    char http_proxy[1024];
+    int httpport=80;
+    
+}defsettings;
 using namespace std;
 pthread_mutex_t lock;
-FILE *logfile=fopen("nijas_hp_log.txt","w+");
 struct logger
 {
  char *date;
@@ -46,11 +53,8 @@ int checkHost(char *host) //firewall
     {
     char** result    = 0;
     int count     = 0;
-    int k=0;
-    char* tmp        = a_str;
-    char* t1 =0;
-    // outsp(a_str);
-    int i,j=0;
+    int k=0,i,j=0;
+    char* tmp        = a_str,*t1;
     t1= (char * )malloc(len);
     for(i=0;i<len;i++)//let me calculate how many elements req.
             if (a_delim ==tmp[i])count++;   
@@ -80,20 +84,39 @@ void logwriter(const char *data)//logging
     time_t now;
 	time(&now);
 	char *date = ctime(&now);
+    FILE *logfile=fopen("nijas_hp_log.txt","a");
 	date[strlen(date) - 1] = '\0';
    fprintf(logfile,"%s: %s\n",date,data);
+   fclose(logfile);
  }
-void outs(const char * msg) { //logging
+void outs(const char * msg) 
+{ //logging
   pthread_mutex_lock( & lock);
   logwriter(msg);
   pthread_mutex_unlock( & lock);
 }
-void outsp(const char * msg) { //print on screen
+void outsp(const char * msg) 
+{ //print on screen
   pthread_mutex_lock( & lock);
   cout << msg << endl;
   pthread_mutex_unlock( & lock);
 }
-char * substr(const char * src, int m, int n) { //funtion to find substr
+
+//calcluate ip outside
+void calculateIP( char * p, char * addr) 
+{
+    struct hostent * host_entry;
+    char * hostbuffer;
+      host_entry = gethostbyname(addr);
+      if (!host_entry)
+        outs("host entry null");
+      else
+        hostbuffer = inet_ntoa( * ((struct in_addr * ) host_entry -> h_addr));
+      sprintf(p, "%s", hostbuffer);
+  }
+
+char * substr(const char * src, int m, int n) 
+{ //funtion to find substr
   // get length of the destination string
   int len = n - m;
 
@@ -113,7 +136,9 @@ char * substr(const char * src, int m, int n) { //funtion to find substr
   // return the destination string
   return dest - len;
 }
-char * trimwhitespace(char * str) { //whitespace trimmer
+char * trimwhitespace(char * str) 
+{ //whitespace 
+
   char * end;
 
   // Trim leading space
@@ -132,79 +157,209 @@ char * trimwhitespace(char * str) { //whitespace trimmer
   return str;
 }
 
+//function to uodate settingsfile
 
-class ControlHandleClient {//hanlde control clients
-    public:
+int updateSettings(struct settings &temp){
     
+     FILE *config;
+       config=fopen("nijas_proxy_settings.txt","w");
+          
+
+   
+    
+   
+    if (NULL == config)
+    {
+         perror("opening config");
+        return (-1);
+    }
+ 
+    fwrite(&temp,sizeof(struct settings),1,config);
+ 
+    fclose(config);
+    return 1;
+}
+
+//function to read settings
+int readSettings(struct settings &temp)
+{
+    FILE* config=fopen("nijas_proxy_settings.txt","r");
+    fread(&temp, sizeof(struct settings), 1, config);
+     printf("port = %d enable=%d remoteproxy=%s remoteport=%d\n",temp.port,temp.enableproxy,temp.http_proxy,temp.httpport); 
+  //  server.port=atoi(st[])
+  fclose(config);
+}
+
+class ControlHandleClient 
+{//hanlde control clients
+    public:
       void handleClient(int client) {
 
-      char buff[1024];
-      int len;
-      char IP[8];
+      char buff[2048],IP[8];
+      int len,tokensize;
       char * request;
-               
-       int tokensize;
-        try{
-              len = read(client, buff, 1024);
+         try{
+              len = read(client, buff, 2048);
            }catch(exception ex)
         {
             cout<<"read error";
         }
         if(len>0)
         {
-            
-            
             const char *headerresponse="HTTP/1.1 200 OK \r\nServer: Nijas_proxy\r\nContent-Type: text/html charset=utf-8\r\n\r\n";
-            
-            
             FILE *fp=fopen("index.html","r");
-            
-             char *content;
-             write(client,headerresponse,strlen(headerresponse));
-           // obtain file size:
-   //         fseek (fp , 0 , SEEK_END);
- //long lSize = ftell (fp);
-//  rewind (fp);
-
-  // allocate memory to contain the whole file:
-  content = (char*) malloc (sizeof(char)*1024);
-if (content == NULL) {fputs ("Memory error",stderr); exit (2);}
-
-  // copy the file into the buffer:
-   //fread (content,1,lSize,fp);
-  //write(client,content,lSize);
-  
-             while((len=fread(content,1,1024,fp))>0)
-             {
-                //cout<<len<<endl;
-           write(client,content,len);
-            //cout<<"wrote"<<len<<endl;
-            
-             }
-             free(content);
+            char *content;
+            write(client,headerresponse,strlen(headerresponse));
+            content = (char*) malloc (sizeof(char)*1024);
+            if (content == NULL) {fputs ("Memory error",stderr); exit (2);}
+            while((len=fread(content,1,1024,fp))>0)
+                write(client,content,len);
+            free(content);
             close(client);
             fclose(fp);
         }
 
       }
-       std::thread handleThread(int c) {
-    return std::thread([ = ] {
-      handleClient(c);
-    });
-       }
-
+      std::thread handleThread(int c) {
+        return std::thread([ = ] {
+          handleClient(c);
+        });
+    }
 }; 
 
-class HandleClient {// handle client
 
-  public:
-   
-    void handleClient(int client) {
+class HandleClient 
+{// handle client
 
-      char buff[1024];
+public:
+     char* http_proxy;
+      int http_port=80;
+      int enableproxy=0;
+          int extractHost(char * buff, char * hostbuf, int len) {
+            int a = 0, j = 0, i,flag=0;
+            for (i = 0; i < len; i++) {
+              if (buff[i] == 'H') {
+                if (buff[i + 1] == 'o' && buff[i + 2] == 's' && buff[i + 3] == 't') {
+                flag=1;
+                  for (j = i + 6; buff[j] != '\r'; j++)
+                    hostbuf[a++] = buff[j];
+
+                    hostbuf[a++]='\0';
+                    break;
+                }
+              }
+
+            }
+            return flag;
+          }
+  void relay_usingpoll(int fd0, int fd1) {
+    int timeout,nfds = 2, current_size = 0, i, j, len, rc, readerfd, writerfd;;
+    struct pollfd fds[2];
+    char buffer[BUFSIZE];
+    memset(fds, 0, sizeof(fds));
+    fds[0].fd = fd0;
+    fds[0].events = POLLIN;
+    fds[1].fd = fd1;
+    fds[1].events = POLLIN;
+    timeout = (3 * 60 * 1000);
+    do {
+      rc = poll(fds, nfds, timeout);
+      if (rc < 0) {
+       outs("  poll() failed");
+        break;
+      }
+      if (rc == 0) {
+        outs("  poll() timed out.  End program.\n");
+        break;
+      }
+
+      if (fds[0].revents == 0) {
+        readerfd = 1;
+        writerfd = 0;
+          } else {
+        readerfd = 0;
+        writerfd = 1;
+        }
+
+      rc = read(fds[readerfd].fd, buffer, sizeof(buffer));
+      if (rc < 0) {
+        if (errno != EWOULDBLOCK) {
+            outs("  rcv failed\n");
+              }
+        break;
+      }
+      if (rc == 0) {
+        outs("  Connection closed end now\n");
+          break;
+      }
+
+      /*****************************************************/
+      /* Data was received                                 */
+      /*****************************************************/
+      len = rc;
+      //  printf("  %d bytes received\n", len);
+
+      /*****************************************************/
+      /* Echo the data back to the client                  */
+
+      /*****************************************************/
+
+      rc = write(fds[writerfd].fd, buffer, len);
+      if (rc < 0) {
+        outs("  send() failed");
+              break;
+      }
+
+    } while (1);
+   }
+
+  void relay(int client, int remote) {
+    relay_usingpoll(client, remote);
+    return;
+ }
+  int connectToServer(char * ip, int port) {
+    int sock;
+    char * p;
+    struct sockaddr_in serv_addr;
+    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+      printf("\n Socket creation error \n");
+    return -1;
+    }
+
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_port = htons(port);
+     // Convert IPv4 and IPv6 addresses from text to binary form 
+    
+    if (inet_pton(AF_INET, ip, & serv_addr.sin_addr) <= 0) {
+        printf("got invalid address\n");
+        return -1;
+    }
+    try {
+      if (connect(sock, (struct sockaddr * ) & serv_addr, sizeof(serv_addr)) < 0) {
+    
+       printf("\nConnection Failed to  \n");
+       return -1;
+      }
+
+    } catch (char * msg) {
+      cout << "error";
+    }
+    //cout << "connected" << endl;
+    return sock;
+
+  }
+ 
+ 
+
+};
+
+void clientThread(HandleClient &hc,int client)
+{
+     char buff[1024];
       int len;
       char IP[8];
       char * request;
+     
        
           int tokensize;
 try{
@@ -218,16 +373,38 @@ try{
       for (int k = 0; k < len; k++)
         request[k] = buff[k];
 
+int serverfd, serverport;
       if (len > 10) {
           
         outs("Read data from client");
+        
+        if(hc.enableproxy)
+       {
+          //outsp(hc.http_proxy);
+           calculateIP(IP,hc.http_proxy);
+//outsp(IP);
+           serverfd=hc.connectToServer(IP,hc.http_port);
+           if(serverfd>0)
+           {
+               write(serverfd,request,len);
+               read(serverfd,buff,1024);
+               write(client,buff,1024);
+               hc.relay(client,serverfd);
+              close(serverfd); 
+           }
+           close(client);
+           
+           
+           
+           return;
+       }
         char * hostbuf;
         char **tokens;
-        int serverfd, serverport;
+        
         hostbuf = (char * ) malloc(len);
         memset(hostbuf,'\0',sizeof(hostbuf));
         char * sstr = substr(buff, 0, 7);
-        int a=extractHost(buff, hostbuf, len);
+        int a=hc.extractHost(buff, hostbuf, len);
        if(a==0)//"Host: " property not found
        {
            close(client);
@@ -235,6 +412,8 @@ try{
            free(request);
            return;
        }
+       
+       
         if (strcmp(sstr, "CONNECT") == 0) {
           outs("Connect method");
 
@@ -256,7 +435,7 @@ try{
           calculateIP(IP, host);
           outs(IP);
          // outsp(IP);
-          serverfd = connectToServer(IP, serverport);
+          serverfd = hc.connectToServer(IP, serverport);
           
        
           if (serverfd > 0) {
@@ -265,7 +444,7 @@ try{
          
           const char * reply = "HTTP/1.1 200 Connection established\r\n\r\n";
           write(client, reply, strlen(reply));
-          relay(client, serverfd);
+          hc.relay(client, serverfd);
           }
           }
           
@@ -277,19 +456,19 @@ try{
           {
               port=tokens[1];
               serverport=atoi(port);
-              outsp(port);
+              //outsp(port);
           }
        
           calculateIP(IP, hostbuf);
           outs(IP);
-          serverfd = connectToServer(IP, serverport);
+          serverfd = hc.connectToServer(IP, serverport);
         
       
           if (serverfd > 0) {
            
           write(serverfd, request, len);
 
-          relay(client, serverfd);
+         hc.relay(client, serverfd);
           close(serverfd);
           }
          
@@ -302,240 +481,19 @@ try{
         
          
         close(client);
-        
-        //free(buff);
-    }
-  int extractHost(char * buff, char * hostbuf, int len) {
-    int a = 0, j = 0, i,flag=0;
-    for (i = 0; i < len; i++) {
-      if (buff[i] == 'H') {
-        if (buff[i + 1] == 'o' && buff[i + 2] == 's' && buff[i + 3] == 't') {
-        flag=1;
-          for (j = i + 6; buff[j] != '\r'; j++)
-            hostbuf[a++] = buff[j];
-
-        hostbuf[a++]='\0';
-            break;
-        }
-      }
-
-    }
-    return flag;
-  }
-
-  void relay_usingpoll(int fd0, int fd1) {
-    int timeout;
-
-    int nfds = 2, current_size = 0, i, j, len;
-    struct pollfd fds[2];
-    int rc, readerfd, writerfd;
-    char buffer[BUFSIZE];
-
-    //initalising poll
-    memset(fds, 0, sizeof(fds));
-    fds[0].fd = fd0;
-    fds[0].events = POLLIN;
-    fds[1].fd = fd1;
-    fds[1].events = POLLIN;
-    timeout = (3 * 60 * 1000);
-    do {
-      // outs("waiting on poll");
-      rc = poll(fds, nfds, timeout);
-      if (rc < 0) {
-       outs("  poll() failed");
-        break;
-      }
-      if (rc == 0) {
-        outs("  poll() timed out.  End program.\n");
-        break;
-      }
-
-      if (fds[0].revents == 0) {
-        readerfd = 1;
-        writerfd = 0;
-        //  outs("read from server");
-      } else {
-        readerfd = 0;
-        writerfd = 1;
-        // outs("read from clienr");
-      }
-
-      rc = read(fds[readerfd].fd, buffer, sizeof(buffer));
-      //  rc=recv(fds[readerfd].fd,buffer,sizeof(buffer),0);    
-      if (rc < 0) {
-        if (errno != EWOULDBLOCK) {
-
-          outs("  rcv failed\n");
-          
-                }
-        break;
-      }
-      if (rc == 0) {
-        outs("  Connection closed end now\n");
-          break;
-      }
-
-      /*****************************************************/
-      /* Data was received                                 */
-      /*****************************************************/
-      len = rc;
-      //  printf("  %d bytes received\n", len);
-
-      /*****************************************************/
-      /* Echo the data back to the client                  */
-
-      /*****************************************************/
-
-      rc = write(fds[writerfd].fd, buffer, len);
-      // rc = send(fds[writerfd].fd, buffer, len, 0);
-      if (rc < 0) {
-        outs("  send() failed");
-              break;
-      }
-
-    } while (1);
-   
-     
-
-  }
-
-  void relay(int client, int remote) {
-    relay_usingpoll(client, remote);
-
-    return;
-
-  }
-
-  char getByte(int socket) {
-    char buf[1], n;
-    if (socket > 0) {
-      n = read(socket, buf, 1);
-      //cout<<"no. of bytes read"<<n<<std::endl;
-      if (n > 0)
-        return buf[0];
-      else
-        return 0x00;
-    }
-  }
-
-  int connectToServer(char * ip, int port) {
-    int sock;
-    char * p;
-    // outs(ip);
-    struct sockaddr_in serv_addr;
-    if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-      printf("\n Socket creation error \n");
-
-      return -1;
-    }
-
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(port);
-    //printf("port=%d", port);
-    outsp(ip);
-
-    // Convert IPv4 and IPv6 addresses from text to binary form 
     
-    if (inet_pton(AF_INET, ip, & serv_addr.sin_addr) <= 0) {
-        //char *temp; 
-        printf("got invalid address\n");
-    //  sprintf(temp,"\nInvalid address/ Address not supported \n%s",ip);
-      //outs(temp);
-      
-      return -1;
-    }
-    try {
-      if (connect(sock, (struct sockaddr * ) & serv_addr, sizeof(serv_addr)) < 0) {
-        //  char *temp;
-       printf("\nConnection Failed to  \n");
-        //outs(temp);
-        return -1;
-      }
-
-    } catch (char * msg) {
-      cout << "error";
-    }
-    //cout << "connected" << endl;
-    return sock;
-
-  }
-  int byte2int(char b) {
-    int res = b;
-    if (res < 0) res = (int)(0x100 + res);
-    return res;
-  }
-  int calcPort(char Hi, char Lo) {
-
-    return ((byte2int(Hi) << 8) | byte2int(Lo));
-  }
-  void calculateIP( char * p, char * addr) {
-
-    int i;
-    struct hostent * host_entry;
-    char * hostbuffer;
-
-   
-
-      host_entry = gethostbyname(addr);
-      if (!host_entry)
-        outs("host entry null");
-      else
-        hostbuffer = inet_ntoa( * ((struct in_addr * ) host_entry -> h_addr));
-
-      sprintf(p, "%s", hostbuffer);
-
-  }
-
- 
-  std::thread handleThread(int c) {
-    return std::thread([ = ] {
-      handleClient(c);
-    });
-  }
-
-};
-
-class Controlserver{
-    
-    public:
-    bool isValid;
-     int server_fd;
-    
-     void finish()
-    {
-        isValid=false;
-        close(server_fd);
-       // server.finish();
-         //serverThread.join();
-        
-        
-    }
-   /* void startServer(int port)
-    {
-        outsp("Server starting");
-       // sleep(5);
-        std::thread serverThread = this->server.mainThread(port);
-       
-    }*/
-    void runServer(int port) {
-   
-     
-   
-    
-
-  }
- 
-  
-
-};
- 
+}
 //class for main server
-class ServerListener {
+class ServerListener 
+{
 
   public:
     bool isValid;
     int server_fd;
     int port=8080;
+    int enableproxy=0;
+    char *httpproxy;
+    int httpport=80;
     void finish()
     {
         isValid=false;
@@ -544,20 +502,9 @@ class ServerListener {
  
 
 };
-
-void segfault(int signal, siginfo_t * si, void * arg) {
-  printf("caught");
-  exit(0);
-}
-void sig_handler(int signum) {
-  std::cerr << "error=" << signum;
-}
-
 // notice that the object is passed by reference
-void servthread(ServerListener& o) {
- 
-  
-
+void servthread(ServerListener& o) 
+{
      int i,  conn_num = 0;
     struct sockaddr_in address;
 
@@ -569,37 +516,7 @@ void servthread(ServerListener& o) {
       exit(EXIT_FAILURE);
     }
     
-    //lets open settings file
-    
    
-        char argport[256];
-        char *http_proxy;
-   /* FILE *fptr;
-    if ((fptr = fopen("nijas_proxy_settings.txt", "r")) == NULL)
-    {
-        printf("Error! opening file");
-        // Program exits if file pointer returns NULL.
-        exit(1);         
-    }
-    // reads text until newline 
-   // fscanf(fptr,"%[^\n]", c);
-      fscanf(fptr,"port=%s", argport);
-      
-      outsp(argport);
-      
-      fscanf(fptr,"http_proxy=%s", http_proxy);
-      outsp(http_proxy);
-   // fscanf(fptr,"%s", c);
-     // outsp(c);
-    fclose(fptr);
-    */
-    // Forcefully attaching socket to the port 8080 
-    /* if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, 
-                                                   &opt, sizeof(opt))) 
-     { 
-         perror("setsockopt"); 
-         exit(EXIT_FAILURE); 
-     } */
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(o.port);
@@ -629,7 +546,10 @@ void servthread(ServerListener& o) {
       
       //exit(0);
       HandleClient clientHandler;
-      std::thread t = clientHandler.handleThread(new_socket);
+      clientHandler.enableproxy=o.enableproxy;
+      clientHandler.http_proxy=o.httpproxy;
+      clientHandler.http_port=o.httpport;
+      std::thread t(clientThread,ref(clientHandler),new_socket);
       t.detach();
       // cout<<"connection number"<<conn_num++<<endl;
 
@@ -641,6 +561,76 @@ void servthread(ServerListener& o) {
     
     
 } 
+
+class Controlserver
+{
+    
+    public:
+    bool isValid;
+     int server_fd;
+    
+     void finish()
+    {
+        isValid=false;
+        close(server_fd);
+       // server.finish();
+         //serverThread.join();
+        
+        
+    }
+   
+    void startServer(ServerListener server)
+    {
+        outsp("Loading config");
+      //  char **settings;
+        
+   struct settings wst={8083,0,"testproxy.com",80};
+   int r= updateSettings(wst);
+    if(r>0)
+        outsp("success");
+   struct settings stt;
+    readSettings(stt);
+    server.port=stt.port;
+    server.enableproxy=stt.enableproxy;
+    server.httpproxy=stt.http_proxy;
+    server.httpport=stt.httpport;
+    
+          std::thread t1(servthread, std::ref(server));
+       t1.detach();
+       // sleep(5);
+    //    std::thread serverThread = this->server.mainThread(port);
+       
+    }
+    
+    void closeServer(ServerListener &server)
+    {
+        server.finish();
+    }
+    
+    void runServer(int port) {
+   
+     
+   
+    
+
+  }
+ 
+  
+
+};
+ 
+
+
+void segfault(int signal, siginfo_t * si, void * arg) 
+{
+  printf("caught");
+  exit(0);
+}
+void sig_handler(int signum) {
+  std::cerr << "error=" << signum;
+}
+
+
 void controlthread(Controlserver &control,ServerListener &server,int port)
 {
      int i,  conn_num = 0;
@@ -702,9 +692,8 @@ void controlthread(Controlserver &control,ServerListener &server,int port)
     }
     control.isValid = true;
     std::cout << "....Control Server started.... " << std::endl;
-  // startServer(port);
-   std::thread t1(servthread, std::ref(server));
-       // t1.detach();
+  control.startServer(ref(server));
+ 
     while (control.isValid) {
 
       int new_socket;
@@ -726,47 +715,33 @@ void controlthread(Controlserver &control,ServerListener &server,int port)
     outsp("control server loop ending");
    outsp("let me close server ");
    server.finish();
-   t1.join();
+  
     
 }
 int main(int argc, char ** argv) {
   struct sigaction sa;
 
   try {
-    int x = 0;
-    int port = 8080,controlport=8081;
-
+    int x = 0,port = 8080,controlport=8081;
     char q;
     
     Controlserver controlserver;
     ServerListener server;
-   
     printf("HTTP/HTTPS proxy server implementation\n");
     //SIG_IGN
     std::thread controlThread(controlthread, std::ref(controlserver),std::ref(server),controlport);
-    
-    
     signal(SIGPIPE, sig_handler);
-    // server.runServer();
-    
-   
-    
     while (q != 'q') {
       cin >> q;
 
     }
     std::cout << "wating for control server" << endl;
-    
     controlserver.finish();
-    
     controlThread.join();
- 
-   
-    //sleep(1000);
-    fclose(logfile);
+    
 
   } catch (std::exception & e) {
-    cout << "unknmmnwdw error";
+    cout << "unknm error";
   }
   return 0;
 }
