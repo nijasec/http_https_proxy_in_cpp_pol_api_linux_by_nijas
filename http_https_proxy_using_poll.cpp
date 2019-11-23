@@ -398,7 +398,7 @@ public:
 
 void clientThread(HandleClient &hc,int client)
 {
-     char buff[1024];
+     char buff[2048];
       int len;
       char IP[8];
       char * request;
@@ -406,12 +406,12 @@ void clientThread(HandleClient &hc,int client)
        
           int tokensize;
 try{
-      len = read(client, buff, 1024);
+      len = read(client, buff, 2048);
    }catch(exception ex)
 {
     cout<<"read error";
 }
-      request = (char * ) malloc(len);//store copy of recvd data 
+      request = (char * ) malloc(len+1);//store copy of recvd data 
       memset(request, '\0', sizeof(request));
       for (int k = 0; k < len; k++)
         request[k] = buff[k];
@@ -430,8 +430,8 @@ int serverfd, serverport;
            if(serverfd>0)
            {
                write(serverfd,request,len);
-               read(serverfd,buff,1024);
-               write(client,buff,1024);
+              len= read(serverfd,buff,2048);
+               write(client,buff,len);
                hc.relay(client,serverfd);
               close(serverfd); 
            }
@@ -509,7 +509,9 @@ int serverfd, serverport;
       
           if (serverfd > 0) {
            
-          write(serverfd, request, len);
+              
+              
+          write(serverfd, request, len+1);
 
          hc.relay(client, serverfd);
           close(serverfd);
@@ -570,7 +572,7 @@ void servthread(ServerListener& o)
       perror("bind failed");
       exit(EXIT_FAILURE);
     }
-    if (listen(o.server_fd, 5) < 0) {
+    if (listen(o.server_fd, 100) < 0) {
       perror("listen");
       cout << "listen error";
       exit(EXIT_FAILURE);
@@ -728,7 +730,7 @@ void controlthread(Controlserver &control,ServerListener &server,int port)
       perror("bind failed");
       exit(EXIT_FAILURE);
     }
-    if (listen(control.server_fd, 5) < 0) {
+    if (listen(control.server_fd, 32) < 0) {
       perror("listen");
       cout << "listen error";
       exit(EXIT_FAILURE);
